@@ -1,0 +1,5 @@
+# 全仓库统一 Unix 换行（LF）：checkout/commit 均为 LF，覆盖 core.autocrlf。
+* text=auto eol=lf
+
+# 二进制资产不参与行尾规范化。
+*.pptx binary

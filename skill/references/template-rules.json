@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.7",
+  "acquisition": {
+    "browser_mode": "user-operated-only; agent browser automation forbidden",
+    "confirmation": "user manually supplies the role-mapped files for one journal: Nature=1 or Science=3",
+    "snapshot_format": "mhtml",
+    "snapshot_api": "browser Save Page as single-file MHTML operated by user",
+    "downstream_source": "the selected journal's user-saved MHTML set only",
+    "dynamic_sections": true
+  },
+  "immutable_assets": {
+    "nature": {
+      "file": "assets/nature-template.pptx",
+      "sha256": "b27b0a18cc5caea68251b028371c3c4ccda5e61a2894e4c960e9d6a21f7809e3"
+    },
+    "science": {
+      "file": "assets/science-template.pptx",
+      "sha256": "7f288083f3d37b3d97affae7e5df8e42ecd9101ebb1115c12ab02e368836f1a2"
+    }
+  },
+  "shared": {
+    "slide_size_emu": {"cx": 12192000, "cy": 6858000},
+    "aspect_ratio": "16:9",
+    "background": "000000",
+    "latin_font": "Calibri",
+    "chinese_font": "宋体",
+    "white": "FFFFFF",
+    "yellow": "FFC000",
+    "title_placeholder": {"x": 0, "y": 0, "cx": 12192000, "cy": 614363},
+    "ordinary_pagination": {"mode": "estimated_visual_lines", "max_visual_lines": 12, "fixed_primary_item_limit": null},
+    "soft_break_xml": "a:br",
+    "main_bullet": {"level": 0, "char": "•", "marL": 228600, "indent": -228600},
+    "subordinate_bullet": {"level": 1, "inherit_from_master": true}
+  },
+  "nature": {
+    "template_slide_roles": {
+      "cover": 1,
+      "this_week": 2,
+      "research_highlight": 3,
+      "news_list": 4,
+      "news_feature": 5,
+      "books_comment_correspondence_work": 6,
+      "news_and_views": 7,
+      "articles_corrections_technology": 8
+    },
+    "nature_group_roles": {
+      "Editorial": "this_week",
+      "World View": "this_week",
+      "Research Highlights": "research_highlight",
+      "Research Highlight": "research_highlight",
+      "News": "news_list",
+      "News Q&A": "news_feature",
+      "Features": "news_feature",
+      "News Feature": "news_feature",
+      "Book Review": "books_comment_correspondence_work",
+      "Obituary": "books_comment_correspondence_work",
+      "Comment": "books_comment_correspondence_work",
+      "Correspondence": "books_comment_correspondence_work",
+      "Feature": "books_comment_correspondence_work",
+      "Career Feature": "books_comment_correspondence_work",
+      "News & Views": "news_and_views",
+      "Articles": "articles",
+      "Article": "articles",
+      "Amendments & Corrections": "articles_corrections_technology",
+      "Technology Feature": "articles_corrections_technology"
+    },
+    "page_layout": {
+      "title_source": "section (column) name by default; template-level override may substitute the group name",
+      "body_group_label": {"style": "bold white, no bullet", "placement": "once before the group's first item in the column", "repeat_on_continuation_pages": false},
+      "mixing": "column-aggregated: groups in DOM order; ordinary groups split by estimated visual-line budget (MAX_PAGE_LINES=12)",
+      "articles_pagination": {"mode": "fixed_primary_items", "dedicated_pages": true, "max_primary_items": 2, "final_page_may_contain": 1, "visual_line_limit": null}
+    },
+    "cover": {
+      "image": {"x": 85323, "y": 746975, "cx": 4191000, "cy": 5562600},
+      "body": {"x": 4436772, "y": 746974, "cx": 7179972, "cy": 5975797},
+      "title_pt": 30,
+      "body_pt": 24,
+      "title_layout": "English and Chinese on one line with no soft break",
+      "body_layout": "English then one soft break then complete Chinese translation",
+      "title_color": "FFFFFF",
+      "title_underline": false
+    },
+    "content_body_default": {"x": 631065, "y": 746974, "cx": 10985679, "cy": 5975797},
+    "footer_cover_thumbnail": {"x": 0, "y": 5911433, "cx": 713167, "cy": 946567},
+    "header_sizes_pt": {"category_chars_0_18": 42, "category_chars_19_28": 36, "category_chars_29_plus": 32, "NEWS": 36, "Amendments & Corrections": 32, "Technology Feature": 32},
+    "header_layout": "left journal + yellow (non-underlined) column name, right-aligned tab stop (a:tabLst algn=r at title_width - 2*91440 - 50000 EMU, tab as \\t in its own run, never a bare a:tab), then volume/date metadata flush right",
+    "meta_format": "Volume {volume} Issue {issue}, {date_long}"
+  },
+  "science": {
+    "template_slide_roles": {
+      "cover": 1,
+      "editorial_news": 2,
+      "commentary_essays_working_life": 3,
+      "news_research": 4,
+      "in_science_journals": 9,
+      "in_other_journals": 13
+    },
+    "science_subsection_roles": {
+      "In Depth": "news",
+      "Feature": "news",
+      "Expert Voices": "commentary",
+      "Perspectives": "commentary",
+      "Policy Forum": "commentary",
+      "Books et al.": "commentary",
+      "Letters": "commentary",
+      "Research Highlights": "research",
+      "Research Articles": "research",
+      "Errata": "research",
+      "expression of concern": "research",
+      "Working Life": "working_life"
+    },
+    "science_section_roles": {
+      "Editorial": "editorial",
+      "News": "news",
+      "Commentary": "commentary",
+      "Essays": "essays",
+      "Research": "research",
+      "Reviews": "research",
+      "Careers": "working_life"
+    },
+    "page_layout": {
+      "title_source": "section (column) name by default",
+      "body_subsection_label": {"style": "bold white, no bullet", "placement": "once before the subsection's first item in the column", "repeat_on_continuation_pages": false},
+      "mixing": "column-driven: subsections in DOM order, split by estimated visual-line budget (MAX_PAGE_LINES=12)"
+    },
+    "forbidden_source_slide": {
+      "slide": 7,
+      "reason": "contains an unrelated dictionary text box; clone slide 9 for In Science Journals instead"
+    },
+    "cover": {
+      "image": {"x": 64680, "y": 614363, "cx": 4694649, "cy": 5975350},
+      "body": {"x": 4913874, "y": 614363, "cx": 6594471, "cy": 6121288},
+      "body_pt": 36,
+      "layout": "bold COVER plus English, one soft break, complete Chinese translation"
+    },
+    "content_body": {"x": 662766, "y": 614363, "cx": 10845580, "cy": 6121288},
+    "footer_cover_thumbnail": {"x": 1, "y": 6014434, "cx": 662764, "cy": 843566},
+    "header_sizes_pt": {"category_chars_0_18": 34, "category_chars_19_28": 30, "category_chars_29_plus": 26},
+    "header_layout": "left journal + yellow (non-underlined) column name, right-aligned tab stop (a:tabLst algn=r at title_width - 2*91440 - 50000 EMU, tab as \\t in its own run, never a bare a:tab), then volume/date metadata flush right",
+    "meta_format": "Volume {volume} | Issue {issue} | {date_short}",
+    "digest_size_tiers": [
+      {"max_total_chars": 699, "title_pt": 32, "english_pt": 24, "chinese_pt": 24, "citation_pt": 20, "font_scale": 100000, "line_reduction": 10000},
+      {"max_total_chars": 1100, "title_pt": 24, "english_pt": 24, "chinese_pt": 24, "citation_pt": 20, "font_scale": 92500, "line_reduction": 10000},
+      {"max_total_chars": 1400, "title_pt": 24, "english_pt": 20, "chinese_pt": 24, "citation_pt": 18, "font_scale": 100000, "line_reduction": 10000},
+      {"max_total_chars": null, "title_pt": 20, "english_pt": 18, "chinese_pt": 20, "citation_pt": 16, "font_scale": 100000, "line_reduction": 10000}
+    ]
+  },
+  "run_rules": {
+    "ordinary_title": {"color": "FFC000", "bold": true, "underline": true, "hyperlink": "same source URL on both English and Chinese runs", "separator": "one a:br"},
+    "ordinary_summary": {"color": "FFFFFF", "bullet_level": 0, "separator": "one a:br"},
+    "digest_title": {"color": "FFFFFF", "bold": true, "underline": false, "hyperlink": false, "separator": "two non-breaking spaces between topic and headline units"},
+    "digest_intro": {"color": "FFFFFF", "bullet_level": 0, "separator": "one a:br"},
+    "digest_citation": {"bullet_level": 1, "prefix_color": "FFFFFF", "doi_color": "FFC000", "doi_underline": true, "hyperlink_scope": "first DOI substring only; trailing see also entry dropped"},
+    "related_perspective": {"bullet_level": 1, "label": "RELATED PERSPECTIVE", "label_color": "FFFFFF", "label_bold": true, "title_color": "FFC000", "title_underline": true, "title_hyperlink": true},
+    "related_research_article": {"bullet_level": 1, "label": "RELATED RESEARCH ARTICLE", "label_color": "FFFFFF", "label_bold": true, "title_color": "FFC000", "title_underline": true, "title_hyperlink": true},
+    "unknown_nature_column": {"include": true, "with_summary": "standard summary slide", "without_summary": "title-list slide"},
+    "unknown_science_column": {"include": true, "style": "generic title-list slide"}
+  }
+}

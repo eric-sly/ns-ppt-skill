@@ -36,7 +36,7 @@ Known title-only Nature types are Book Review, Correspondence, Career Column, Ca
 
 Read issue metadata and cover from the user-saved TOC MHTML. Before the user saves it, instruct them to expand `.journal-issue__details .view-more` until it shows `View Less` (or the equivalent expanded state). `View Cover` is not the description control. Treat the saved MHTML as authoritative; if the parsed description is missing or clearly truncated, ask the user to save it again.
 
-Discover every actual `section.toc__section` in page order. Do not require the historical six section names. Inside each section, treat each `h5.to-section` as the current subsection label and every `h3.article-title` as a primary card. Read title, URL, DOI, authors, date, pages, abstract excerpt, and `.card-footer` relationships.
+Discover every actual `section.toc__section` in page order. Do not require the historical six section names. Inside each section, treat each `h5.to-section` as the current subsection label and every `h3.article-title` as a primary card. Read title, URL, DOI, authors, date, pages, abstract excerpt, and `.card-footer` relationships. Each primary card's abstract excerpt renders as a bilingual summary line under its title on the list page; `Research Articles` excerpts are truncated TOC teasers and are excluded from that rendering.
 
 Cards titled `In Science Journals` and `In Other Journals` are digest wrappers and are replaced by their user-saved detail-page items. Wrapper recognition strips all non-alphanumeric characters from the card title before matching the two canonical digest names, so renamed or reformatted headings still resolve. Do not exclude an entire subsection merely because its old name was `Research Highlights`. Attach every explicit footer `RELATED Perspective` and `RELATED Research Article` as a subordinate relationship (the TOC shows the pairing from both sides); do not promote unrelated Editorial or Letter relationships.
 
@@ -55,6 +55,7 @@ For every `section[id^=sec-]` read topic from `h2 .core-label`, remaining headli
 - The slide title is the section (column) name by default; a template-level override may substitute the group name. Each group name renders once as a bold white label before its first item in that column; continuation pages omit it.
 - New or renamed Nature groups use a standard summary slide when a summary exists, otherwise a title-list slide.
 - New or renamed Science sections/subsections use the generic Science title-list slide.
+- Science TOC cards with an abstract excerpt render it as a bilingual summary line under the title (all subsections except `Research Articles`, whose excerpts are truncated TOC teasers); cards without an excerpt render title-only.
 - Ordinary slides split when the estimated visual-line budget is exceeded (see template-features §6; `MAX_PAGE_LINES` is 20 for Nature and 12 for Science). Nature pages also follow the density caps: `Articles` groups stay on dedicated pages with at most two primary items per page (allowing one on the final page); pages holding summarised items hold at most three; title-only pages hold at most four; summarised and title-only items never share a page. Each related Perspective or related Research Article line contributes two estimated visual lines on line-budgeted pages.
 - Never use a changed column name as a reason to omit content.
 

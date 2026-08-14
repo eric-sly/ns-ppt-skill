@@ -64,14 +64,16 @@ The accepted cover differs from the original template: place the English and Chi
 |---|---:|---|
 | Cover | 1 | Large cover left; 36 pt copy right |
 | Editorial | 2 | Editorial column page |
-| Commentary, Essays, Working Life | 3 | Linked bilingual title list |
-| News, Research, Reviews | 4 | Linked bilingual title list |
+| Commentary, Essays, Working Life | 3 | Linked bilingual title list with abstract summaries |
+| News, Research, Reviews | 4 | Linked bilingual title list with abstract summaries |
 | In Science Journals detail | 9 | One item per page |
 | In Other Journals detail | 13 | One item per page |
 
 Do not clone Science template slide 7; it contains an unrelated dictionary text box. Slide 9 is the clean `In Science Journals` source.
 
 Pages follow the column-driven layout. The slide title is the section (column) name read from the page; each subsection renders one bold white label before its first item in DOM order, and continuation pages omit the label. Pages split when the estimated visual-line budget (see §6) is exceeded. Template roles are selected per subsection first and per section as a fallback; a section and subsection that are both unknown use the generic slide 2 title list and remain included.
+
+Ordinary list slides render each TOC item's abstract excerpt as a bilingual summary line under its title; `Research Articles` excerpts are truncated TOC teasers and are excluded, and cards without an excerpt render title-only.
 
 Science header size is 34 pt for names up to 18 characters, 30 pt up to 28, and 26 pt beyond; the size also drops when the combined journal + subsection + metadata text exceeds the tab position (~66 combined characters at 34 pt, ~75 at 30 pt, ~87 at 26 pt). Ordinary headers begin with `Science`; the metadata follows a right-aligned tab (see §2) so it stays flush right. Digest headers omit the redundant journal word and begin directly with `In Science Journals` or `In Other Journals`. Metadata syntax is `Volume {volume} | Issue {issue} | {date}`.
 

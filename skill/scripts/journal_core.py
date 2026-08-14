@@ -342,7 +342,14 @@ def _science_card(h3: Tag, base_url: str, section_name: str, subsection_name: st
     if meta:
         page_match = re.search(r":\s*([0-9]+(?:[-–][0-9]+)?)", clean(meta.get_text(" ", strip=True)))
         pages = page_match.group(1) if page_match else ""
-    abstract_node = card.select_one(".card-body")
+    # The main card-body is a direct child of .card-content. A bare
+    # select_one(".card-body") descends into .card-footer and can match the
+    # nested body of a RELATED card (an author line such as "BY ... Science
+    # 13 Aug 2026") instead of the card's own abstract. Research Article cards
+    # have no main body at all; their abstract sits in the collapsed
+    # .card-footer > .collapse > .accordion__content, which the footer-text
+    # fallback below extracts.
+    abstract_node = card.select_one(".card-content > .card-body")
     if abstract_node is None:
         footer = card.select_one(".card-footer")
         footer_text = clean(footer.get_text(" ", strip=True) if footer else "")
@@ -740,12 +747,16 @@ def date_slug(value: str) -> str:
 
 def translated_item(source: dict[str, Any], translations: dict[str, Any], show_summary: bool) -> dict[str, Any]:
     translated = translations[source["id"]]
+    # Science TOC cards store the abstract excerpt under "abstract" (Nature
+    # uses "summary"); both feed the same bilingual summary line. A card with
+    # no excerpt simply renders its title only.
+    summary = (source.get("summary") or source.get("abstract", "")) if show_summary else ""
     return {
         "id": source["id"],
         "title": source["title"],
         "zh": translated["chinese_title"],
-        "summary": source.get("summary", "") if show_summary else "",
-        "zh_summary": translated.get("chinese_summary", "") if show_summary else "",
+        "summary": summary,
+        "zh_summary": translated.get("chinese_summary", "") if summary else "",
         "url": source.get("url", ""),
     }
 
@@ -894,6 +905,22 @@ def append_article(txbody: ET.Element, item: dict[str, Any], cfg: dict[str, floa
         {"text": item["zh"], "size": cfg["title"], "bold": True, "underline": True, "color": YELLOW, "lang": "zh-CN", "url": item.get("url")},
     ]
     add_paragraph(txbody, title_runs, rels, size=cfg["title"], bullet=bullet_title, before=cfg["gap"], after=0.5, line=cfg["line"])
+    # Bilingual summary first, then the subordinate RELATED lines: the item's
+    # own abstract excerpt precedes the related Perspective/Research Article.
+    if item.get("summary"):
+        add_paragraph(
+            txbody,
+            [
+                {"text": item["summary"], "size": cfg["body"], "color": WHITE},
+                {"break": True},
+                {"text": item["zh_summary"], "size": cfg["zh"], "color": WHITE, "lang": "zh-CN"},
+            ],
+            rels,
+            size=cfg["body"],
+            bullet=True,
+            after=0.4,
+            line=cfg["line"],
+        )
     related = item.get("related_perspective")
     if related:
         size = cfg.get("related", max(16, cfg["title"] - 6))
@@ -925,20 +952,6 @@ def append_article(txbody: ET.Element, item: dict[str, Any], cfg: dict[str, floa
             size=size,
             level=1,
             inherit_level=True,
-        )
-    if item.get("summary"):
-        add_paragraph(
-            txbody,
-            [
-                {"text": item["summary"], "size": cfg["body"], "color": WHITE},
-                {"break": True},
-                {"text": item["zh_summary"], "size": cfg["zh"], "color": WHITE, "lang": "zh-CN"},
-            ],
-            rels,
-            size=cfg["body"],
-            bullet=True,
-            after=0.4,
-            line=cfg["line"],
         )
 
 
@@ -1209,6 +1222,12 @@ SCIENCE_SECTION_ROLES = {
     "Reviews": "research",
     "Careers": "working_life",
 }
+# Science TOC cards carry an abstract excerpt that renders as a bilingual
+# summary line under each item title (user-approved enrichment). Cards
+# without an excerpt simply render their title only. Research Article cards
+# are excluded: their TOC excerpt is a truncated abstract teaser ("..."), and
+# the complete introduction is carried by the In Science Journals digest.
+SCIENCE_SUMMARY_EXCLUDE_SUBSECTIONS = {"Research Articles"}
 SCIENCE_ROLE_SLIDES = {
     "editorial": 2,
     "news": 4,
@@ -1345,7 +1364,9 @@ def plan_science(issue: dict[str, Any], translations: dict[str, Any]) -> list[di
         page_sections: list[tuple[str, list[dict[str, Any]]]] = []
         shown_subsection_labels: set[str] = set()
         for label, item in entries:
-            translated = translated_item(item, titems, False)
+            translated = translated_item(
+                item, titems, item.get("subsection", "") not in SCIENCE_SUMMARY_EXCLUDE_SUBSECTIONS
+            )
             translated["_show_group_label"] = label not in shown_subsection_labels
             perspectives = [value for value in item.get("related", []) if value["kind"].lower() == "perspective"]
             if perspectives:

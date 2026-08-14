@@ -112,7 +112,7 @@ Patch format — all keys optional, only provided `chinese_*` fields are updated
   },
   "science": {
     "cover": {"chinese_summary": "..."},
-    "items": {"<item-id>": {"chinese_title": "..."}},
+    "items": {"<item-id>": {"chinese_title": "...", "chinese_summary": "..."}},
     "digests": {
       "in_science_journals": {
         "<item-id>": {"chinese_topic": "...", "chinese_headline": "...", "chinese_intro": "..."}
@@ -126,7 +126,7 @@ Translation rules:
 
 - Preserve all selected sentences, claims, numbers, names, qualifiers, uncertainty, causal relations, and examples. Translate fully; do not summarize or condense.
 - For Nature, fill `chinese_title` for every item and `chinese_summary` for every item whose `display_summary` is true; translate the cover title and summary.
-- For Science, fill `chinese_title` for every TOC item (title-only), the cover `chinese_summary` (`chinese_title` stays `封面`), and `chinese_topic`, `chinese_headline`, `chinese_intro` for every digest item in both `in_science_journals` and `in_other_journals`.
+- For Science, fill `chinese_title` for every TOC item and `chinese_summary` for every TOC item whose `abstract` excerpt is rendered as a bilingual summary line (all subsections except `Research Articles`, whose truncated teasers stay title-only), the cover `chinese_summary` (`chinese_title` stays `封面`), and `chinese_topic`, `chinese_headline`, `chinese_intro` for every digest item in both `in_science_journals` and `in_other_journals`.
 
 ## 6. Build, audit, and export
 

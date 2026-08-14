@@ -43,11 +43,16 @@ CONFIG_PATH = SKILL_ROOT / "config" / "runtime.json"
 
 def prepare_worksheet(issue: dict[str, Any]) -> dict[str, Any]:
     science = issue["science"]
+    # TOC cards carry an abstract excerpt that renders as a bilingual summary
+    # under the title; cards without an excerpt stay title-only. Research
+    # Article cards are excluded: their excerpt is a truncated teaser and the
+    # complete introduction lives in the In Science Journals digest.
+    exclude_subsections = {"Research Articles"}
     items: dict[str, dict[str, str]] = {
         item["id"]: {
             "english_title": item.get("title", ""),
             "chinese_title": "",
-            "english_summary": "",
+            "english_summary": "" if subsection["name"] in exclude_subsections else item.get("abstract", ""),
             "chinese_summary": "",
         }
         for section in science["sections"]

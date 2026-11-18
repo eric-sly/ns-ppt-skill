@@ -17,9 +17,11 @@ Install only after the user confirms the Python interpreter:
 "<confirmed-python>" -m pip install beautifulsoup4 lxml Pillow
 ```
 
-Optional browser automation for agent capture (see §3b): `playwright`, launched
-against an installed Chrome or Edge — no browser download required. Nothing else
-(no Selenium, no requests/urllib downloader) is needed for source acquisition.
+`playwright` is optional and deliberately not bundled or declared: agent capture
+(§3b) needs it, the agent must detect whether the interpreter can import it, and
+if it cannot, the agent tells the user and lets them decide how to provide it —
+never installs it silently. Nothing else (no Selenium, no requests/urllib
+downloader) is used for source acquisition.
 
 ## 2. Agent capability and optional validation tools
 
@@ -67,6 +69,10 @@ content loads, and snapshots the page with the DevTools protocol
 (`Page.captureSnapshot`) into MHTML. Science capture follows the `In Science
 Journals` / `In Other Journals` links from the TOC and captures each detail page
 the same way.
+
+Playwright is not bundled here and not declared as a dependency: check whether the
+interpreter can import it, and if it cannot, ask the user how to proceed instead
+of installing anything yourself.
 
 ```text
 "<python>" scripts/capture_issue.py --journal nature  --out-dir work/capture

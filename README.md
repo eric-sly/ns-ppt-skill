@@ -8,7 +8,7 @@
 
 **源文件**：两种方式任选，产物都是 MHTML，后续流程完全一致。
 
-- **让 agent 抓取（省事）**：agent 运行 `scripts/capture_issue.py`，用本机 Chrome/Edge 打开当期页面、展开封面描述、滚动完整期，再保存为 MHTML。需要先 `pip install playwright`，不需要额外下载浏览器。**抓不到的情况**（站点人机验证、页面条目明显偏少、找不到 digest 链接）脚本会以退出码 3 结束、把可疑页面移到 `rejected/`，并给出 `message_for_user`——agent 会照它提示你自己保存，不会拿坏页面凑数。
+- **让 agent 抓取（省事）**：agent 运行 `scripts/capture_issue.py`，用本机 Chrome/Edge 打开当期页面、展开封面描述、滚动完整期，再保存为 MHTML。它依赖 Python 环境里能 import `playwright`——**skill 不自带、也不规定怎么装**：agent 会先检测，缺了就告诉你，由你决定怎么提供（或干脆自己存页面）。**抓不到的情况**（站点人机验证、页面条目明显偏少、找不到 digest 链接）脚本会以退出码 3 结束、把可疑页面移到 `rejected/`，并给出 `message_for_user`——agent 会照它提示你自己保存，不会拿坏页面凑数。
 - **自己保存（可控）**：用浏览器打开当期页面，手动保存为「网页，单个文件 (*.mhtml)」。
 
 | 期刊 | 需要的文件 |

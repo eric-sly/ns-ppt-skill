@@ -31,8 +31,12 @@ suspect file moved to `rejected/` and a ready-to-send `message_for_user` naming
 the exact pages, URLs, save paths and steps. The agent must then stop and ask the
 user to save those pages (user-manual-save), never scrape a rejected page.
 
-Requirements: `pip install playwright`, plus an installed Chrome or Edge
-(launched through `channel="chrome"` / `"msedge"`; no browser download needed).
+Requirements: the `playwright` package must be importable by the interpreter
+running this script, and Chrome or Edge must be installed (launched through
+`channel="chrome"` / `"msedge"`). The skill does not bundle playwright and does
+not prescribe how to install it: when the package is missing the script fails
+over to the user (see below), and whether to install it is a decision for the
+user and the agent to make in that session.
 """
 
 from __future__ import annotations
@@ -103,8 +107,8 @@ def _playwright():
         from playwright.sync_api import sync_playwright
     except ImportError:  # pragma: no cover - depends on the host environment
         raise RuntimeError(
-            "playwright is not installed for this interpreter (pip install playwright; "
-            "Chrome or Edge is then launched with --channel chrome, no browser download needed)"
+            "browser automation needs the playwright package, which is not available in the "
+            "Python interpreter running this skill"
         )
     return sync_playwright
 
@@ -319,6 +323,10 @@ def _request_message(journal: str, failures: list[dict[str, Any]]) -> str:
         "cannot be obtained by the agent. Please save the file(s) below yourself:",
         "",
     ]
+    advices = [failure["advice"] for failure in failures if failure.get("advice")]
+    if advices:
+        lines.insert(0, advices[0])
+        lines.insert(1, "")
     for index, failure in enumerate(failures, 1):
         lines.append(f"{index}) {labels.get(failure['role'], failure['role'])}")
         if failure.get("url"):
@@ -355,6 +363,11 @@ def main() -> int:
     try:
         sync_playwright = _playwright()
     except RuntimeError as error:
+        advice = (
+            "This skill does not bundle playwright and does not prescribe how to install it. "
+            "Ask the user whether to make playwright available to this Python interpreter "
+            "(their choice of method) or to save the pages below themselves."
+        )
         failures = [
             {
                 "role": role,
@@ -362,6 +375,7 @@ def main() -> int:
                 "url": url or None,
                 "save_to": str(path.resolve()),
                 "steps": list(SAVE_STEPS[role]),
+                "advice": advice,
             }
             for role, url, path in _role_targets(args.journal, toc_url, out_dir,
                                                  args.in_science_url, args.in_other_url)
@@ -386,19 +400,27 @@ def main() -> int:
                 return "no digest entries found on the detail page"
         return None
 
-    def record_failure(role: str, reason: str, url: str, path: Path) -> None:
-        failures.append({
+    def record_failure(role: str, reason: str, url: str, path: Path,
+                       advice: str | None = None) -> None:
+        entry = {
             "role": role,
             "reason": reason,
             "url": url or None,
             "save_to": str(path.resolve()),
             "steps": list(SAVE_STEPS[role]),
-        })
+        }
+        if advice:
+            entry["advice"] = advice
+        failures.append(entry)
 
     with sync_playwright() as playwright:
         try:
             browser, channel_used = _launch(playwright, args.channel, not args.headed)
         except RuntimeError as error:
+            advice = (
+                "No Chrome/Edge window could be launched. Ask the user whether to point the "
+                "script at a browser (--channel) or to save the pages below themselves."
+            )
             failures = [
                 {
                     "role": role,
@@ -406,6 +428,7 @@ def main() -> int:
                     "url": url or None,
                     "save_to": str(path.resolve()),
                     "steps": list(SAVE_STEPS[role]),
+                    "advice": advice,
                 }
                 for role, url, path in _role_targets(args.journal, toc_url, out_dir,
                                                      args.in_science_url, args.in_other_url)

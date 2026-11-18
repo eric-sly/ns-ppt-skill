@@ -78,7 +78,10 @@ hard failure. Never hand-edit `config/runtime.json`.
   banner, clicks the description control until it reads `show less` / `View Less`,
   scrolls the whole issue, and snapshots MHTML with the DevTools protocol. For
   Science it also follows the `In Science Journals` and `In Other Journals` links.
-  Read `capture-manifest.json`: `warnings` mean the capture is suspect (never
+  It needs `playwright` in the interpreter and Chrome/Edge on the machine; the
+  skill neither bundles playwright nor prescribes how to install it — check for it,
+  and if it is missing tell the user and let them decide. Read
+  `capture-manifest.json`: `warnings` mean the capture is suspect (never
   expanded, too few cards), `title` must be the intended issue. Then pass
   `--capture-manifest` to `scrape`. Use `--headed` if a consent wall or login
   needs a human.

@@ -37,9 +37,12 @@ The pipeline needs Python 3.10+ with `beautifulsoup4` (MHTML/HTML parsing), `lxm
 "<confirmed-python>" -m pip install beautifulsoup4 lxml Pillow
 ```
 
-Agent capture (§3b) additionally needs `playwright` (`pip install playwright`) and
-an installed Chrome or Edge, which it launches with `--channel chrome`; no browser
-download is required. Without playwright only the manual-save path is available.
+Agent capture (§3b) additionally needs the `playwright` package and an installed
+Chrome or Edge. Playwright is deliberately **not** bundled with the skill and not
+declared here: whether it is available depends on the host, so the agent checks
+for it and, when it is missing, tells the user and lets them decide how to
+provide it (or to save the pages manually). Without it only the manual-save path
+is available.
 
 ## 3. Source intake
 
@@ -67,6 +70,14 @@ browser), capture with the bundled script instead of improvising:
 "<python>" scripts/capture_issue.py --journal nature  --out-dir work/capture
 "<python>" scripts/capture_issue.py --journal science --out-dir work/capture
 ```
+
+Playwright is **not** bundled with this skill and is not one of its declared
+dependencies. Before the first capture of a session, check that the interpreter
+running the skill can import it (`python -c "import playwright"`). If it cannot,
+say so plainly, tell the user that automated capture needs playwright, and let
+them decide how to provide it (any method they prefer) or to save the pages
+manually. Never install packages silently, and never record an unverified
+success for a capture that did not run.
 
 What it does per page: navigate → dismiss the cookie banner → click the
 description control until it reads `show less` / `View Less` → scroll the whole

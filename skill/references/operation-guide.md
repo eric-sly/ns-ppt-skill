@@ -271,9 +271,15 @@ After reviewing the build and audit output, export the same-base-name PDF. Try t
    soffice --headless --convert-to pdf --outdir "work/output" "work/output/Nature <date>.pptx"
    ```
 3. **PowerPoint COM (Windows)** — if PowerPoint is installed:
+   ```text
+   pwsh -NoProfile -File scripts/export_pdf.ps1 -Pptx "work/output/Nature <date>.pptx" -Pdf "work/output/Nature <date>.pdf"
+   ```
+   It prints `PDF:`, `PAGES:` and `BYTES:`; compare `PAGES` with the slide count.
+   The equivalent inline snippet:
    ```powershell
    $ppt = New-Object -ComObject PowerPoint.Application
    $ppt.Visible = $true
+   $ppt.DisplayAlerts = 1
    $pres = $ppt.Presentations.Open("F:\...\Nature <date>.pptx", $true, $false, $false)
    $pres.SaveAs("F:\...\Nature <date>.pdf", 32)  # 32 = ppSaveAsPDF
    $pres.Close()

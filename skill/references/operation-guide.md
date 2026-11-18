@@ -232,10 +232,34 @@ python scripts/run_science_only.py --stage build \
 
 The builder clones template role slides, paginates ordinary columns/groups/subsections by the per-journal estimated visual-line budget (`MAX_PAGE_LINES` = 20 for Nature, 12 for Science) plus the Nature density caps (at most two primary items on `Articles` pages, three on summarised pages, four on title-only pages, no mixing of summarised with title-only items), creates one slide per Science digest item, writes exact fonts/bullets/soft breaks, and applies fixed hyperlinks. A group/subsection label renders only before its first item in that column; continuation pages omit it. After writing the PPTX it automatically:
 
-1. runs the structural audit (`REPORT ... RESULT errors=N warnings=M`), including source URL/DOI completeness, font/color/hyperlink checks, exactly one rendered label per group/subsection occurrence, the two-primary-item cap on Nature Articles pages, and the same per-journal line-capacity estimate used by the planner for other ordinary pages; audit errors make the command return a nonzero status, but the generated PPTX remains available; and
-2. if `officecli` is on `PATH`, runs `officecli validate` and `officecli view ... issues`; otherwise it prints `OFFICECLI SKIPPED`. These external results are advisory and do not change the builder's exit status.
+1. runs the structural audit (`REPORT ... RESULT errors=N warnings=M`), including source URL/DOI completeness, font/color/hyperlink checks, exactly one rendered label per group/subsection occurrence, the two-primary-item cap on Nature Articles pages, and the same per-journal line-capacity estimate used by the planner for other ordinary pages; audit errors make the command return a nonzero status, but the generated PPTX remains available;
+2. if `officecli` is on `PATH`, runs `officecli validate` and `officecli view ... issues`; otherwise it prints `OFFICECLI SKIPPED`. These external results are advisory and do not change the builder's exit status; and
+3. when a PowerPoint COM automation is available (Windows + PowerPoint), measures real text overflow with PowerPoint's layout engine and prints `OVERFLOW_SHAPES=n` (also `overflow_shapes` in the JSON summary); otherwise `OVERFLOW SKIPPED`. The line estimate cannot see glyph metrics, so this is the check that catches a page the planner thought fits. It is advisory, so fix the page (§6c) before exporting.
 
 Review both outputs, fix clear content or structural problems when practical, and report any unresolved findings. Automated checks assist the agent and user; they do not replace final human review.
+
+### 6c. Real-layout overflow
+
+`OVERFLOW_SHAPES=0` means every text box fits. When it is not 0, list the paragraphs of the offending slide, then split it so the overflowing items move to their own page:
+
+```text
+pwsh -NoProfile -File scripts/measure_overflow.ps1 -Pptx "<deck>" -Slide <n>            # paragraph map with indices
+pwsh -NoProfile -File scripts/split_overflow_page.ps1 -Pptx "<deck>" -Slide <n> -DryRun  # same map, no change
+pwsh -NoProfile -File scripts/split_overflow_page.ps1 -Pptx "<deck>" -Slide <n> -SplitAfterParagraph <k>
+```
+
+Rules:
+
+- split only at an item boundary: the paragraphs kept are complete groups of
+  `label / title / summary`; the first paragraph moved to the new page must be the
+  next group or subsection label, so the new page starts with its label;
+- a continuation page keeps the same header; never duplicate a label that already
+  appears on the previous page;
+- re-run `measure_overflow.ps1` after the split and repeat until
+  `OVERFLOW_SHAPES=0`, then export the PDF (§6b) — a PDF built before the fix has
+  the wrong page count;
+- if PowerPoint is unavailable, say so and leave the finding to the user instead
+  of guessing.
 
 ### 6b. PDF export
 

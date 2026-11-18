@@ -152,11 +152,15 @@ grep or targeted offset; never read the whole file).
    24/20/20.5 pt tier; pages holding summarised items hold at most three;
    title-only pages hold at most four; summarised and title-only items never
    share a page. The builder then applies exact formatting and hyperlink
-   scopes, audits structure, and runs an optional `officecli` check.
+   scopes, audits structure, checks `officecli` when present, and (Windows +
+   PowerPoint) measures real overflow with PowerPoint's own layout engine.
 6. Review and report the audit output, fix clear problems when practical, then
    export the same-base-name PDF (officecli PDF plugin → LibreOffice headless →
-   PowerPoint COM; see operation-guide §6b). Automated findings inform the
-   final agent/user review; they are not an absolute acceptance gate.
+   PowerPoint COM; see operation-guide §6b). When the build reports
+   `OVERFLOW_SHAPES` above 0, split the offending page with
+   `scripts/split_overflow_page.ps1` and re-measure until it is 0 before the PDF
+   export (§6c). Automated findings inform the final agent/user review; they are
+   not an absolute acceptance gate.
 
 ## Non-negotiable rules
 

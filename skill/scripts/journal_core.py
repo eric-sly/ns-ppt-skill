@@ -17,6 +17,7 @@ import io
 import json
 import math
 import mimetypes
+import os
 import platform
 import re
 import shutil
@@ -1151,6 +1152,7 @@ def set_body(txbody: ET.Element, spec: dict[str, Any], rels: Relationships) -> N
             txbody,
             [
                 {"text": item["title"], "size": 30, "bold": True, "color": WHITE},
+                {"text": " ", "size": 30, "bold": True, "color": WHITE},
                 {"text": item["zh"], "size": 30, "bold": True, "color": WHITE, "lang": "zh-CN"},
             ],
             rels,
@@ -2075,6 +2077,48 @@ def check_environment(config: Path) -> bool:
     if ok:
         print(f"ENV OK: {Path(executable).name} {python.get('version', '')} | ppt_skill={ppt.get('name')}")
     return ok
+
+
+def overflow_report(deck: Path, tolerance_pt: float = 0.5) -> dict[str, Any]:
+    """Measure real text overflow with PowerPoint's layout engine (advisory).
+
+    The line-budget estimate used by the planner is deliberately conservative but
+    it cannot see actual glyph metrics; this second pass opens the built deck in
+    PowerPoint and compares each text box's needed height with the available one.
+    Only available on Windows with PowerPoint installed; everywhere else the check
+    reports `skipped` and the build stays valid.
+    """
+    if os.name != "nt":
+        print("OVERFLOW SKIPPED: PowerPoint measurement is Windows-only")
+        return {"status": "skipped", "shapes": None}
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if shell is None:
+        print("OVERFLOW SKIPPED: no PowerShell on PATH")
+        return {"status": "skipped", "shapes": None}
+    script = Path(__file__).resolve().parent / "measure_overflow.ps1"
+    if not script.is_file():
+        print("OVERFLOW SKIPPED: measure_overflow.ps1 is missing")
+        return {"status": "skipped", "shapes": None}
+    try:
+        result = subprocess.run(
+            [shell, "-NoProfile", "-File", str(script), "-Pptx", str(deck), "-TolerancePt", str(tolerance_pt)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
+        )
+    except Exception as error:  # pragma: no cover - host dependent
+        print(f"OVERFLOW SKIPPED: measurement failed ({error})")
+        return {"status": "skipped", "shapes": None}
+    output = (result.stdout or "").strip()
+    if output:
+        print(output)
+    match = re.search(r"OVERFLOW_SHAPES=(\d+)", output)
+    if match is None:
+        print("OVERFLOW SKIPPED: measurement produced no result")
+        return {"status": "skipped", "shapes": None}
+    shapes = int(match.group(1))
+    if shapes:
+        print(f"OVERFLOW: {shapes} shape(s) exceed their text box; see "
+              "references/operation-guide.md §6c and fix before delivery")
+    return {"status": "ok", "shapes": shapes}
 
 
 def officecli_validate(deck: Path) -> None:

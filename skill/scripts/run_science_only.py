@@ -33,6 +33,7 @@ from journal_core import (
     date_slug,
     load_source,
     officecli_validate,
+    overflow_report,
     parse_science_digest,
     parse_science_toc,
     plan_science,
@@ -266,7 +267,8 @@ def stage_build(args: argparse.Namespace) -> int:
     errors, warnings, report = audit(output, "science", None, args.output)
     code = audit_report(errors, warnings, report)
     officecli_validate(output)
-    print(json.dumps({"output": str(output.resolve()), "slides": len(pages), "audit_ok": not errors}, ensure_ascii=False))
+    overflow = overflow_report(output)
+    print(json.dumps({"output": str(output.resolve()), "slides": len(pages), "audit_ok": not errors, "overflow_shapes": overflow["shapes"]}, ensure_ascii=False))
     return code
 
 

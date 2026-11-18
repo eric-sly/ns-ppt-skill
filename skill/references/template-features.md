@@ -56,7 +56,7 @@ Clone only the following source slides:
 
 Pages follow the column-aggregated layout. The slide title is the column (section) name read from the page, yellow without underline; each in-column group renders one bold white label before its first item in DOM order, and continuation pages omit the label. Pages split when the estimated visual-line budget (see §6) is exceeded, except that the `Articles` group stays on dedicated pages with at most two primary items per page. Header syntax is `Nature`, the yellow (non-underlined) column name, a right-aligned tab, then `Volume {volume} Issue {issue}, {date}` (see §2). Use 42 pt for names up to 18 characters, 36 pt up to 28, and 32 pt beyond; keep 32 pt for `Amendments & Corrections`. Because the volume metadata shares the header line, the size also drops so the combined journal + column name + metadata text stays inside the tab position: at most ~54 combined characters at 42 pt, ~63 at 36 pt, ~71 at 32 pt, and ~81 at 28 pt (e.g. `News in Focus` totals 57 characters and therefore renders at 36 pt).
 
-The accepted cover differs from the original template: place the English and Chinese cover title on one line, white, bold, 30 pt, without underline; place the English display description and complete Chinese translation at 24 pt with one soft break.
+The accepted cover differs from the original template: place the English and Chinese cover title on one line, white, bold, 30 pt, without underline, separated by a single space (`Material gains 材料的增益`); place the English display description and complete Chinese translation at 24 pt with one soft break.
 
 ## 4. Science slide roles
 

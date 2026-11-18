@@ -24,6 +24,13 @@ The script writes one MHTML per role plus `capture-manifest.json`:
 Pass the manifest to the scrape stage (`--capture-manifest`) so issue.json
 records `agent-capture` provenance and verifies the file hashes.
 
+Failure is a normal outcome, not an exception to hide: a bot-protection or
+consent screen, a page with far too few items, or a digest link that cannot be
+found makes the script exit 3 and mark the manifest `status: failed`, with the
+suspect file moved to `rejected/` and a ready-to-send `message_for_user` naming
+the exact pages, URLs, save paths and steps. The agent must then stop and ask the
+user to save those pages (user-manual-save), never scrape a rejected page.
+
 Requirements: `pip install playwright`, plus an installed Chrome or Edge
 (launched through `channel="chrome"` / `"msedge"`; no browser download needed).
 """
@@ -50,6 +57,39 @@ SCIENCE_EXPAND_SELECTOR = ".journal-issue__details .view-more"
 SCIENCE_EXPANDED_TEXT = "view less"
 
 COOKIE_LABELS = ("Reject optional", "Reject all", "Accept all")
+
+# Titles served by bot protection / consent walls instead of the issue page.
+CHALLENGE_TITLES = (
+    "checking your browser",
+    "just a moment",
+    "attention required",
+    "are you a robot",
+    "security verification",
+    "performing security verification",
+    "access denied",
+    "verify you are human",
+)
+
+SAVE_STEPS = {
+    "nature": (
+        "Expand the cover description until the control reads 'show less'.",
+        "Scroll through the whole issue so every item and image loads.",
+        "Save the page as a single-file MHTML (网页，单个文件 (*.mhtml)).",
+    ),
+    "science_toc": (
+        "Expand the issue description until the control reads 'View Less'.",
+        "Scroll through the whole issue so every item and image loads.",
+        "Save the page as a single-file MHTML (网页，单个文件 (*.mhtml)).",
+    ),
+    "in_science": (
+        "Scroll through every entry on the page.",
+        "Save the page as a single-file MHTML (网页，单个文件 (*.mhtml)).",
+    ),
+    "in_other": (
+        "Scroll through every entry on the page.",
+        "Save the page as a single-file MHTML (网页，单个文件 (*.mhtml)).",
+    ),
+}
 
 # Below these counts the capture is almost certainly incomplete (a consent
 # wall, a login prompt, or a page that never rendered).  They are warnings, not
@@ -156,6 +196,9 @@ def _diagnostics(page, journal: str) -> dict[str, Any]:
     else:
         data["cards"] = page.locator("h3.article-title").count()
         data["sections"] = page.locator("section.toc__section").count()
+    lower = _norm(data["title"])
+    data["challenge"] = next((marker for marker in CHALLENGE_TITLES if marker in lower), None)
+    data["body_text"] = _norm(page.evaluate("document.body ? document.body.innerText.slice(0, 400) : ''"))
     return data
 
 
@@ -231,6 +274,34 @@ def _launch(playwright, channel: str | None, headless: bool):
     raise SystemExit(f"could not launch a Chromium-family browser: {last_error}")
 
 
+def _request_message(journal: str, failures: list[dict[str, Any]]) -> str:
+    """A ready-to-send request the agent can hand to the user (translate as needed)."""
+    labels = {
+        "nature": "the Nature issue table of contents",
+        "science_toc": "the Science issue table of contents",
+        "in_science": "the 'In Science Journals' page",
+        "in_other": "the 'In Other Journals' page",
+    }
+    lines = [
+        f"Automatic capture did not work for this {journal.capitalize()} issue, so the source pages "
+        "cannot be obtained by the agent. Please save the file(s) below yourself:",
+        "",
+    ]
+    for index, failure in enumerate(failures, 1):
+        lines.append(f"{index}) {labels.get(failure['role'], failure['role'])}")
+        if failure.get("url"):
+            lines.append(f"   URL: {failure['url']}")
+        lines.append(f"   Why the agent stopped: {failure['reason']}")
+        lines.append(f"   Save to: {failure['save_to']}")
+        lines.append("   Steps:")
+        for step in failure["steps"]:
+            lines.append(f"     - {step}")
+        lines.append("")
+    lines.append("When the files exist, tell the agent their paths. Do not pass --capture-manifest "
+                 "for files you saved yourself; the agent will record them as user-manual-save.")
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--journal", choices=("nature", "science"), required=True)
@@ -251,6 +322,30 @@ def main() -> int:
     sync_playwright = _playwright()
     warnings: list[str] = []
     files: dict[str, dict[str, Any]] = {}
+    failures: list[dict[str, Any]] = []
+
+    def reject_reason(role: str, result: dict[str, Any]) -> str | None:
+        if result.get("challenge"):
+            return f"the site served a bot-protection/consent screen (title: {result.get('title')!r})"
+        if role == "nature":
+            if result.get("cards", 0) < NATURE_MIN_CARDS:
+                return f"only {result.get('cards')} cards found, expected at least {NATURE_MIN_CARDS}"
+        elif role == "science_toc":
+            if result.get("sections", 0) < SCIENCE_MIN_SECTIONS:
+                return f"only {result.get('sections')} TOC sections found, expected at least {SCIENCE_MIN_SECTIONS}"
+        else:
+            if result.get("sections", 0) < 1:
+                return "no digest entries found on the detail page"
+        return None
+
+    def record_failure(role: str, reason: str, url: str, path: Path) -> None:
+        failures.append({
+            "role": role,
+            "reason": reason,
+            "url": url or None,
+            "save_to": str(path.resolve()),
+            "steps": list(SAVE_STEPS[role]),
+        })
 
     with sync_playwright() as playwright:
         browser, channel_used = _launch(playwright, args.channel, not args.headed)
@@ -262,45 +357,93 @@ def main() -> int:
         page = context.new_page()
 
         if args.journal == "nature":
-            files["nature"] = _capture_one(
-                page, toc_url, out_dir / "nature-issue.mhtml", "nature",
+            target = out_dir / "nature-issue.mhtml"
+            result = _capture_one(
+                page, toc_url, target, "nature",
                 NATURE_EXPAND_SELECTOR, NATURE_EXPANDED_TEXT, timeout_ms,
             )
-            if NATURE_EXPANDED_TEXT not in _norm(str(files["nature"].get("expansion_state"))):
+            result["requested_url"] = toc_url
+            files["nature"] = result
+            reason = reject_reason("nature", result)
+            if reason:
+                record_failure("nature", reason, toc_url, target)
+            elif NATURE_EXPANDED_TEXT not in _norm(str(result.get("expansion_state"))):
                 warnings.append("cover description did not reach '" + NATURE_EXPANDED_TEXT + "'")
-            if files["nature"].get("cards", 0) < NATURE_MIN_CARDS:
-                warnings.append(f"only {files['nature'].get('cards')} cards captured")
         else:
-            files["science_toc"] = _capture_one(
-                page, toc_url, out_dir / "science-toc.mhtml", "science",
+            toc_target = out_dir / "science-toc.mhtml"
+            toc_result = _capture_one(
+                page, toc_url, toc_target, "science",
                 SCIENCE_EXPAND_SELECTOR, SCIENCE_EXPANDED_TEXT, timeout_ms,
             )
-            if SCIENCE_EXPANDED_TEXT not in _norm(str(files["science_toc"].get("expansion_state"))):
-                warnings.append("issue description did not reach '" + SCIENCE_EXPANDED_TEXT + "'")
-            if files["science_toc"].get("sections", 0) < SCIENCE_MIN_SECTIONS:
-                warnings.append(f"only {files['science_toc'].get('sections')} TOC sections captured")
-
-            digests = _digest_urls(page)
-            if args.in_science_url:
-                digests["in_science"] = args.in_science_url
-            if args.in_other_url:
-                digests["in_other"] = args.in_other_url
-            for role, filename in (("in_science", "in-science-journals.mhtml"),
-                                   ("in_other", "in-other-journals.mhtml")):
-                url = digests.get(role)
-                if not url:
-                    raise SystemExit(
-                        f"could not find the {role} detail link on the TOC; pass "
-                        f"--{role.replace('_', '-')}-url explicitly"
+            toc_result["requested_url"] = toc_url
+            files["science_toc"] = toc_result
+            toc_reason = reject_reason("science_toc", toc_result)
+            if toc_reason:
+                record_failure("science_toc", toc_reason, toc_url, toc_target)
+                for role, filename in (("in_science", "in-science-journals.mhtml"),
+                                       ("in_other", "in-other-journals.mhtml")):
+                    record_failure(role, "the TOC capture failed, so this detail link could not be "
+                                         "discovered; open it from the TOC yourself",
+                                   args.in_science_url if role == "in_science" else args.in_other_url,
+                                   out_dir / filename)
+            else:
+                if SCIENCE_EXPANDED_TEXT not in _norm(str(toc_result.get("expansion_state"))):
+                    warnings.append("issue description did not reach '" + SCIENCE_EXPANDED_TEXT + "'")
+                digests = _digest_urls(page)
+                if args.in_science_url:
+                    digests["in_science"] = args.in_science_url
+                if args.in_other_url:
+                    digests["in_other"] = args.in_other_url
+                for role, filename in (("in_science", "in-science-journals.mhtml"),
+                                       ("in_other", "in-other-journals.mhtml")):
+                    url = digests.get(role)
+                    target = out_dir / filename
+                    if not url:
+                        record_failure(role, "the digest link was not found on the TOC", "", target)
+                        continue
+                    detail = context.new_page()
+                    result = _capture_one(
+                        detail, url, target, "science", "", "", timeout_ms, is_toc=False,
                     )
-                detail = context.new_page()
-                files[role] = _capture_one(
-                    detail, url, out_dir / filename, "science", "", "", timeout_ms, is_toc=False,
-                )
-                files[role]["requested_url"] = url
-                detail.close()
+                    result["requested_url"] = url
+                    detail.close()
+                    reason = reject_reason(role, result)
+                    if reason:
+                        record_failure(role, reason, url, target)
+                    else:
+                        files[role] = result
 
         browser.close()
+
+    if failures:
+        # Never leave a challenge page behind as if it were a usable source.
+        rejected_dir = out_dir / "rejected"
+        failed_roles = {failure["role"] for failure in failures}
+        for role in failed_roles:
+            captured = files.get(role) or {}
+            path = Path(captured.get("path", "")) if captured.get("path") else None
+            if path and path.is_file():
+                rejected_dir.mkdir(parents=True, exist_ok=True)
+                path.replace(rejected_dir / path.name)
+            files.pop(role, None)
+        manifest = {
+            "journal": args.journal,
+            "tool": "capture_issue.py",
+            "tool_version": TOOL_VERSION,
+            "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "channel": channel_used,
+            "headless": not args.headed,
+            "status": "failed",
+            "files": files,
+            "failures": failures,
+            "message_for_user": _request_message(args.journal, failures),
+        }
+        if warnings:
+            manifest["warnings"] = warnings
+        manifest_path = out_dir / "capture-manifest.json"
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps({"manifest": str(manifest_path.resolve()), **manifest}, ensure_ascii=False, indent=2))
+        return 3
 
     manifest = {
         "journal": args.journal,
@@ -309,6 +452,7 @@ def main() -> int:
         "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "channel": channel_used,
         "headless": not args.headed,
+        "status": "ok",
         "files": files,
     }
     if warnings:

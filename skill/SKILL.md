@@ -94,6 +94,25 @@ Never accept a URL in place of a file, or a PDF, screenshot, copied text, or
 browser cache folder. The bundled `assets/*.pptx` files are the binary visual
 ground truth; never recreate their slides from blank layouts.
 
+### If capture fails, fall back to the user — do not improvise
+
+`capture_issue.py` exits 3 and writes `status: failed` when the site serves a
+bot-protection or consent screen, when the TOC has far too few items, or when a
+digest link cannot be found. The suspect file is moved to `rejected/` and the
+manifest carries `message_for_user`: the exact pages, URLs, save paths and steps.
+
+Then, in this order:
+
+1. Stop the automatic path for that issue; never scrape, parse or ship a page
+   that was rejected as a challenge screen.
+2. Send the user the request (`message_for_user`, translated into the user's
+   language) and wait for the files.
+3. When the paths arrive, run `scrape` **without** `--capture-manifest` so the
+   files are recorded as `user-manual-save`, and continue the pipeline.
+
+A retry is reasonable once (for example `--headed`, or `--in-science-url` given
+explicitly). If it fails again, go to the user instead of retrying variants.
+
 ## Read before execution
 
 1. [references/operation-guide.md](references/operation-guide.md) — exact
@@ -113,6 +132,8 @@ grep or targeted offset; never read the whole file).
 1. Environment gate passes (`ENV OK`).
 2. Acquire the MHTML set for the journal: `capture_issue.py` (agent capture) or
    the user's own save. Check the manifest/title, then keep those files unchanged.
+   If capture exits 3 (`status: failed`), stop and ask the user to save the
+   listed pages; do not scrape a rejected page.
 3. Run `scrape` with `--archive-dir` (and `--capture-manifest` for agent capture)
    so `issue.json` records stable replayable paths and honest provenance.
 4. As the agent, fill every required `chinese_*` field — translate fully,

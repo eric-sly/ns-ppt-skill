@@ -146,6 +146,12 @@ def acquisition_record(
     manifest: dict[str, Any] | None = None
     if manifest_path is not None:
         manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        if manifest.get("status") == "failed":
+            raise ValueError(
+                "the capture manifest is marked failed: the agent capture did not produce usable "
+                "pages. Ask the user to save the files named in message_for_user, then scrape "
+                "those files without --capture-manifest."
+            )
         tool_files = manifest.get("files") or {}
         record["mode"] = "agent-capture"
         record["agent_browser_automation"] = True

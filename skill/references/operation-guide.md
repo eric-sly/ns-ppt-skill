@@ -92,6 +92,38 @@ file's hash differs from the manifest.
 `--headed` shows the window; use it when a consent wall or a login must be
 completed by hand, then re-run headless for the real capture.
 
+### 3c. When capture fails
+
+`capture_issue.py` treats these as failure, not as a usable snapshot:
+
+- the page title or body is a bot-protection / consent screen (`Just a moment…`,
+  `Checking your Browser…`, `Are you a robot`, …);
+- the TOC has too few cards/sections (below `NATURE_MIN_CARDS` /
+  `SCIENCE_MIN_SECTIONS`);
+- a Science digest link is not on the TOC (use `--in-science-url` /
+  `--in-other-url` if you know it), or the detail page has no entries.
+
+On failure it:
+
+- moves the suspect MHTML to `<out-dir>/rejected/` so nothing downstream can
+  mistake it for a source;
+- writes `capture-manifest.json` with `status: failed`, a `failures` list (role,
+  reason, URL, save path, steps) and `message_for_user`;
+- exits with status 3.
+
+What the agent does then:
+
+1. Do not scrape the rejected page and do not substitute another source.
+2. Send `message_for_user` to the user, translated into their language; keep the
+   URLs, save paths and steps verbatim.
+3. One retry is allowed if you have a concrete new lever (`--headed`, an
+   explicit digest URL). A second failure goes to the user.
+4. When the user returns the paths, run `scrape` **without** `--capture-manifest`;
+   the files are then recorded as `user-manual-save`.
+
+Report the fallback in the completion summary: attempt, reason it failed, what
+the user supplied.
+
 ## 4. MHTML authority and replay
 
 ### 4a. Archive the MHTML files
@@ -229,5 +261,9 @@ python scripts/clean_skill_cache.py --backup   # also prune old backup/ dirs (ke
 ## 7. Stop and review conditions
 
 Hard-stop when the environment gate is invalid, the required MHTML file(s) are absent or the wrong role, a capture manifest does not match the supplied bytes, a capture manifest warns that the page never expanded or is obviously incomplete, MHTML parsing fails, a required title/URL/introduction/citation/DOI is missing, a required translation is blank, PPTX construction fails, or no export provider exists when a PDF is required.
+
+A failed agent capture (exit 3, `status: failed`) is not a hard stop for the task:
+it is the signal to send the user `message_for_user` and wait for manual saves
+(§3c). Pause there; resume with the user-supplied files.
 
 Treat suspected truncation, structural-audit errors/warnings, and `officecli` findings as review signals. Fix clear problems when practical. If a usable deck remains and the user prefers a permissive workflow, report unresolved findings and let the agent/user review determine final acceptance.

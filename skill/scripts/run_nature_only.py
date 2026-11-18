@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Nature-only pipeline: scrape -> translations worksheet -> build, from ONE user-saved MHTML.
+"""Nature-only pipeline: scrape -> translations worksheet -> build, from ONE MHTML.
+
+The MHTML is either saved by the user or produced by capture_issue.py
+(agent capture); its provenance is recorded in issue.json.
 
 This is the Nature entry point of the per-journal pipeline. It reuses the parsing,
 planning, and PPTX-building logic from the standard scripts but never touches
@@ -14,7 +17,6 @@ Science. Run it in stages:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import sys
@@ -23,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from journal_core import (
+    acquisition_record,
     audit,
     audit_report,
     build,
@@ -113,7 +116,7 @@ def validate_translations(issue: dict[str, Any], translations: dict[str, Any]) -
 def stage_scrape(args: argparse.Namespace) -> int:
     path = Path(args.nature)
     if urllib.parse.urlparse(args.nature).scheme in {"http", "https"} or path.suffix.lower() not in {".mhtml", ".mht"}:
-        raise SystemExit("--nature must be a local user-saved .mhtml/.mht file")
+        raise SystemExit("--nature must be a local .mhtml/.mht file (user-saved or agent-captured)")
     if not path.is_file():
         raise SystemExit(f"--nature file not found: {path}")
 
@@ -133,18 +136,11 @@ def stage_scrape(args: argparse.Namespace) -> int:
     issue: dict[str, Any] = {"schema_version": "1.0", "nature": nature}
     if args.media_dir:
         _write_cover(nature, source, Path(args.media_dir), "nature")
-    final_path = Path(args.nature)
-    issue["acquisition"] = {
-        "mode": "user-manual-save",
-        "agent_browser_automation": False,
-        "files": {
-            "nature": {
-                "path": str(final_path.resolve()),
-                "sha256": hashlib.sha256(final_path.read_bytes()).hexdigest(),
-                "embedded_url": source.url,
-            }
-        },
-    }
+    issue["acquisition"] = acquisition_record(
+        {"nature": Path(args.nature)},
+        {"nature": source.url},
+        args.capture_manifest,
+    )
     write_issue(issue, args.output)
     if args.translations:
         data = load_or_prepare_worksheet(issue, args.translations)
@@ -202,7 +198,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage", choices=("scrape", "prepare", "build"), help="pipeline stage (not needed with --configure)")
     parser.add_argument("--configure", nargs="+", metavar="ARG", help="configure environment: <ppt-skill-name> <evidence> [skill-md-path]")
-    parser.add_argument("--nature", help="user-saved Nature issue MHTML path (stage scrape)")
+    parser.add_argument("--nature", help="Nature issue MHTML path, user-saved or captured by capture_issue.py (stage scrape)")
+    parser.add_argument("--capture-manifest", type=Path, help="capture-manifest.json produced by capture_issue.py; records agent-capture provenance and verifies file hashes (stage scrape)")
     parser.add_argument("--archive-dir", type=Path, help="copy the source MHTML into <archive-dir>/nature-<date>/ before re-parsing (stage scrape)")
     parser.add_argument("--output", type=Path, help="normalized UTF-8 issue JSON path (not needed with --configure)")
     parser.add_argument("--media-dir", type=Path, help="directory for extracted cover image (stage scrape)")

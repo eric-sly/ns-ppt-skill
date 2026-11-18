@@ -1,14 +1,17 @@
 # NS-PPT Skill 使用说明
 
-将 Nature / Science 当期目录制作成中英双语周报 PPTX/PDF。你只需在浏览器中保存好源网页并告知文件路径，其余工作（解析、逐条翻译、排版、检查、导出）全部由 agent 完成，不需要额外的翻译服务或翻译 API。
+将 Nature / Science 当期目录制作成中英双语周报 PPTX/PDF。源页面可以由你在浏览器里保存，也可以让 agent 用内置脚本自动抓取；其余工作（解析、逐条翻译、排版、检查、导出）全部由 agent 完成，不需要额外的翻译服务或翻译 API。
 
 ## 准备工作
 
 **环境（仅首次使用需要）**：Python 3.10+，并安装 beautifulsoup4、lxml、Pillow。
 
-**源文件**：用浏览器打开当期页面，手动保存为「网页，单个文件 (*.mhtml)」。
+**源文件**：两种方式任选，产物都是 MHTML，后续流程完全一致。
 
-| 期刊 | 需保存的文件 |
+- **让 agent 抓取（省事）**：agent 运行 `scripts/capture_issue.py`，用本机 Chrome/Edge 打开当期页面、展开封面描述、滚动完整期，再保存为 MHTML。需要先 `pip install playwright`，不需要额外下载浏览器。
+- **自己保存（可控）**：用浏览器打开当期页面，手动保存为「网页，单个文件 (*.mhtml)」。
+
+| 期刊 | 需要的文件 |
 |---|---|
 | Nature | 当期目录页 1 个（展开封面描述至显示 `show less`，滚动完整期后保存） |
 | Science | 3 个：当期目录页（展开描述至显示 `View Less`）、`In Science Journals` 详情页、`In Other Journals` 详情页 |
@@ -19,8 +22,8 @@
 
 ## 使用步骤
 
-1. 按上表保存好所需的 MHTML 文件。
-2. 将文件路径发给 agent，并说明要制作 Nature 还是 Science 周报。
+1. 告诉 agent 要做 Nature 还是 Science 周报。
+2. 源文件二选一：让 agent 直接抓取当期（推荐，先确认当期已经上线）；或按上表自己保存好 MHTML，把路径发给 agent。
 3. agent 完成逐条完整翻译、构建 PPTX 并导出 PDF。
 4. 从输出目录取走成品（PPTX 与 PDF）。
 

@@ -17,7 +17,9 @@ Install only after the user confirms the Python interpreter:
 "<confirmed-python>" -m pip install beautifulsoup4 lxml Pillow
 ```
 
-No browser-automation package is required or permitted. Playwright, Selenium, urllib downloaders, and curl are all forbidden for source acquisition.
+Optional browser automation for agent capture (see §3b): `playwright`, launched
+against an installed Chrome or Edge — no browser download required. Nothing else
+(no Selenium, no requests/urllib downloader) is needed for source acquisition.
 
 ## 2. Agent capability and optional validation tools
 
@@ -37,9 +39,16 @@ The agent should report whether the check passed, produced findings, or was skip
 
 See `references/operation-guide.md` §6b for the ordered fallback chain (officecli PDF plugin → LibreOffice → PowerPoint COM). If no exporter exists, preserve and deliver the PPTX and report that PDF export was unavailable.
 
-## 3. User input dependencies (required, only the user can supply)
+## 3. Source acquisition — two supported modes
 
-The user must manually save the MHTML file(s) for the journal being built via their own browser and supply absolute local paths mapped to the roles below. The agent must never browse, automate, download, or substitute these files.
+The MHTML set for the journal being built is the only downstream source. Either
+mode produces it; the mode and its evidence are recorded in `issue.json`.
+
+### 3a. User manual save (default when the user offers files)
+
+The user saves each page with the browser's single-file MHTML option and supplies
+absolute local paths mapped to the roles below. Use this when the site asks for a
+login, a consent step only a human can complete, or the user simply prefers it.
 
 - **Nature only** (one file): Nature current issue TOC → `nature-issue.mhtml`.
 - **Science only** (three files):
@@ -47,12 +56,44 @@ The user must manually save the MHTML file(s) for the journal being built via th
   2. Science `In Science Journals` standalone detail page → `in-science-journals.mhtml`
   3. Science `In Other Journals` standalone detail page → `in-other-journals.mhtml`
 
-See `references/operation-guide.md` §3 for the exact save instructions given to the user.
+See `references/operation-guide.md` §3a for the save instructions given to the user.
+
+### 3b. Agent capture (`scripts/capture_issue.py`)
+
+The agent drives the installed Chrome/Edge through Playwright: it opens the TOC,
+dismisses the cookie banner, expands the description control until it reads
+`show less` (Nature) / `View Less` (Science), scrolls the whole issue so lazy
+content loads, and snapshots the page with the DevTools protocol
+(`Page.captureSnapshot`) into MHTML. Science capture follows the `In Science
+Journals` / `In Other Journals` links from the TOC and captures each detail page
+the same way.
+
+```text
+"<python>" scripts/capture_issue.py --journal nature  --out-dir work/capture
+"<python>" scripts/capture_issue.py --journal science --out-dir work/capture
+```
+
+It writes the role files plus `capture-manifest.json` (URL, title, expansion
+state, card/section counts, SHA-256). Pass that manifest to `scrape` with
+`--capture-manifest`; `issue.json` then records `mode: agent-capture`,
+`agent_browser_automation: true`, the tool/version/time, and rejects any file
+whose hash does not match the manifest. Add `--headed` when a consent wall needs
+a human, and check the manifest `warnings` (for example a description that never
+reached `show less`, or a card count far below a normal issue).
+
+### 3c. Rules that apply to both modes
+
+- Downstream work reads the MHTML files, never a live URL, a cached HTML folder,
+  a PDF, a screenshot, or copied text.
+- The capture must cover the whole issue: expand the description control first,
+  then scroll to the end before saving or snapshotting.
+- Report which mode was used. Never describe an agent capture as a manual save.
 
 ## 4. Not required (do not install even if older artifacts mention them)
 
-- **playwright** — not declared, never checked, and forbidden for source acquisition. Any `runtime.json` produced by an older version may list it; that record is stale and must be regenerated with `--configure`.
-- **Selenium, requests, urllib3 downloaders** — same as above.
+- **Selenium, requests, urllib3 downloaders, curl** — never used for source
+  acquisition. Only `playwright` (§3b) may drive a browser, and only through
+  `scripts/capture_issue.py`; the MHTML it produces is still the sole source.
 
 ## 5. Environment gate
 

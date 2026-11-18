@@ -4,7 +4,7 @@ This file separates hard pipeline requirements from advisory quality signals. Ex
 
 ## Hard requirements
 
-- The agent asks the user to manually save the MHTML file(s) for the journal being built (Nature: one TOC; Science: TOC plus the two digest detail pages); only those user-provided local files are parsed.
+- The MHTML file set for one journal (Nature: one TOC; Science: TOC plus the two digest detail pages) is acquired either by the user's own save or by `scripts/capture_issue.py`; only those local files are parsed, and the mode is recorded in `issue.json`.
 - Current Nature/Science sections are discovered dynamically; renamed or new columns are retained through deterministic fallback layouts.
 - Full selected English content is translated without summarization.
 - Each group/subsection label appears exactly once per column occurrence, before its first item; continuation pages do not repeat it.
@@ -25,4 +25,4 @@ The agent performs translation, construction, and automated checks. The user rem
 
 ## Content ground truth
 
-The user-saved MHTML page(s) for the journal being built are the only content ground truth. Any previously produced deck (including decks accepted in past runs) is not a content source and must not be copied from. If a past deck appears to violate a rule above, the rule wins — the past deck was an accepted anomaly, not a template to imitate.
+The MHTML page(s) for the journal being built — user-saved or agent-captured — are the only content ground truth. Any previously produced deck (including decks accepted in past runs) is not a content source and must not be copied from. If a past deck appears to violate a rule above, the rule wins — the past deck was an accepted anomaly, not a template to imitate.

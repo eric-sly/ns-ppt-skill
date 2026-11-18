@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Science-only pipeline: scrape -> translations worksheet -> build, from THREE user-saved MHTMLs.
+"""Science-only pipeline: scrape -> translations worksheet -> build, from THREE MHTMLs.
+
+The MHTMLs are either saved by the user or produced by capture_issue.py
+(agent capture); their provenance is recorded in issue.json.
 
 This is the Science entry point of the per-journal pipeline. It reuses the parsing and
 PPTX-building logic from the standard scripts but never touches Nature. Run it in stages:
@@ -13,7 +16,6 @@ PPTX-building logic from the standard scripts but never touches Nature. Run it i
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import sys
@@ -22,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from journal_core import (
+    acquisition_record,
     audit,
     audit_report,
     build,
@@ -152,7 +155,7 @@ def stage_scrape(args: argparse.Namespace) -> int:
     for label, value in (("--science-toc", args.science_toc), ("--in-science", args.in_science), ("--in-other", args.in_other)):
         path = Path(value)
         if urllib.parse.urlparse(value).scheme in {"http", "https"} or path.suffix.lower() not in {".mhtml", ".mht"}:
-            raise SystemExit(f"{label} must be a local user-saved .mhtml/.mht file")
+            raise SystemExit(f"{label} must be a local .mhtml/.mht file (user-saved or agent-captured)")
         if not path.is_file():
             raise SystemExit(f"{label} file not found: {path}")
         sources.append((label, path))
@@ -193,21 +196,20 @@ def stage_scrape(args: argparse.Namespace) -> int:
     issue: dict[str, Any] = {"schema_version": "1.0", "science": science}
     if args.media_dir:
         _write_cover(science, science_source, Path(args.media_dir), "science")
-    file_labels = ("--science-toc", "--in-science", "--in-other")
-    file_attrs = ("science_toc", "in_science", "in_other")
     final_sources = (science_source, load_source(args.in_science), load_source(args.in_other))
-    issue["acquisition"] = {
-        "mode": "user-manual-save",
-        "agent_browser_automation": False,
-        "files": {
-            label: {
-                "path": str(Path(getattr(args, attr)).resolve()),
-                "sha256": hashlib.sha256(Path(getattr(args, attr)).read_bytes()).hexdigest(),
-                "embedded_url": source.url,
-            }
-            for label, attr, source in zip(file_labels, file_attrs, final_sources)
+    issue["acquisition"] = acquisition_record(
+        {
+            "science_toc": Path(args.science_toc),
+            "in_science": Path(args.in_science),
+            "in_other": Path(args.in_other),
         },
-    }
+        {
+            "science_toc": final_sources[0].url,
+            "in_science": final_sources[1].url,
+            "in_other": final_sources[2].url,
+        },
+        args.capture_manifest,
+    )
     write_issue(issue, args.output)
     if args.translations:
         data = load_or_prepare_worksheet(issue, args.translations)
@@ -272,9 +274,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage", choices=("scrape", "prepare", "build"), help="pipeline stage (not needed with --configure)")
     parser.add_argument("--configure", nargs="+", metavar="ARG", help="configure environment: <ppt-skill-name> <evidence> [skill-md-path]")
-    parser.add_argument("--science-toc", help="user-saved Science issue TOC MHTML path (stage scrape)")
-    parser.add_argument("--in-science", help="user-saved In Science Journals MHTML path (stage scrape)")
-    parser.add_argument("--in-other", help="user-saved In Other Journals MHTML path (stage scrape)")
+    parser.add_argument("--science-toc", help="Science issue TOC MHTML path, user-saved or captured (stage scrape)")
+    parser.add_argument("--in-science", help="In Science Journals MHTML path, user-saved or captured (stage scrape)")
+    parser.add_argument("--in-other", help="In Other Journals MHTML path, user-saved or captured (stage scrape)")
+    parser.add_argument("--capture-manifest", type=Path, help="capture-manifest.json produced by capture_issue.py; records agent-capture provenance and verifies file hashes (stage scrape)")
     parser.add_argument("--archive-dir", type=Path, help="copy the source MHTMLs into <archive-dir>/science-<date>/ before re-parsing (stage scrape)")
     parser.add_argument("--output", type=Path, help="normalized UTF-8 issue JSON path (not needed with --configure)")
     parser.add_argument("--media-dir", type=Path, help="directory for extracted cover image (stage scrape)")

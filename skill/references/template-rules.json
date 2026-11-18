@@ -1,11 +1,15 @@
 {
   "schema_version": "1.7",
   "acquisition": {
-    "browser_mode": "user-operated-only; agent browser automation forbidden",
-    "confirmation": "user manually supplies the role-mapped files for one journal: Nature=1 or Science=3",
+    "modes": ["user-manual-save", "agent-capture"],
+    "default_mode": "user-manual-save",
+    "browser_mode": "user-operated save, or agent capture through scripts/capture_issue.py (Playwright + installed Chrome/Edge)",
+    "confirmation": "role-mapped files for one journal: Nature=1 or Science=3",
     "snapshot_format": "mhtml",
-    "snapshot_api": "browser Save Page as single-file MHTML operated by user",
-    "downstream_source": "the selected journal's user-saved MHTML set only",
+    "snapshot_api": "user Save Page as single-file MHTML, or CDP Page.captureSnapshot in capture_issue.py",
+    "provenance": "issue.json records mode, agent_browser_automation, tool/version/time and per-file capture evidence; --capture-manifest verifies each file hash",
+    "prerequisites": "expand the description control (show less / View Less) and scroll the whole issue before saving or capturing",
+    "downstream_source": "the selected journal's MHTML set only; never a live URL",
     "dynamic_sections": true
   },
   "immutable_assets": {

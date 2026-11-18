@@ -102,7 +102,7 @@ def abs_url(base: str, href: str | None) -> str:
 def load_source(value: str) -> Source:
     path = Path(value)
     if path.suffix.lower() not in {".mhtml", ".mht"}:
-        raise ValueError(f"only local user-saved MHTML is allowed: {value}")
+        raise ValueError(f"only a local MHTML file (.mhtml/.mht) is allowed: {value}")
     raw = path.read_bytes()
 
     message = BytesParser(policy=policy.default).parsebytes(raw)
@@ -127,6 +127,56 @@ def load_source(value: str) -> Source:
 def write_issue(result: dict[str, Any], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def acquisition_record(
+    paths: dict[str, Path],
+    embedded_urls: dict[str, str],
+    manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Build the `acquisition` block recorded in issue.json.
+
+    Two supported modes:
+      * no manifest -> `user-manual-save`, the user saved each page themselves;
+      * `--capture-manifest` from capture_issue.py -> `agent-capture`, and every
+        supplied file must match the hash the capture recorded, so an automated
+        source can never be mislabelled as a manual save.
+    """
+    record: dict[str, Any] = {"mode": "user-manual-save", "agent_browser_automation": False, "files": {}}
+    manifest: dict[str, Any] | None = None
+    if manifest_path is not None:
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        tool_files = manifest.get("files") or {}
+        record["mode"] = "agent-capture"
+        record["agent_browser_automation"] = True
+        for key in ("tool", "tool_version", "captured_at", "channel", "headless"):
+            if key in manifest:
+                record[key] = manifest[key]
+        record["manifest"] = str(Path(manifest_path).resolve())
+        missing = [role for role in paths if role not in tool_files]
+        if missing:
+            raise ValueError(f"capture manifest has no entry for: {', '.join(missing)}")
+
+    for role, path in paths.items():
+        digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        entry: dict[str, Any] = {
+            "path": str(Path(path).resolve()),
+            "sha256": digest,
+            "embedded_url": embedded_urls.get(role, ""),
+        }
+        if manifest is not None:
+            captured = manifest["files"][role]
+            if captured.get("sha256") != digest:
+                raise ValueError(
+                    f"{role}: supplied file does not match the capture manifest "
+                    f"(manifest {str(captured.get('sha256'))[:16]}…, file {digest[:16]}…) — "
+                    "re-capture or scrape the file that was actually captured"
+                )
+            for key in ("url", "title", "expansion_state", "cards", "sections", "bytes"):
+                if key in captured:
+                    entry["capture_" + key] = captured[key]
+        record["files"][role] = entry
+    return record
 
 
 def _authors(card: Tag) -> list[str]:
@@ -154,8 +204,8 @@ def _write_cover(issue: dict[str, Any], source: Source, directory: Path, stem: s
     if payload is None:
         raise ValueError(
             f"cover image not found in MHTML resources for {stem}; "
-            "agent download is forbidden — re-save the MHTML after scrolling "
-            "the issue page fully so the cover image is embedded"
+            "the issue page was not fully loaded before it was saved or captured — "
+            "scroll the whole issue (or re-run capture_issue.py) so the cover image is embedded"
         )
     ext = mimetypes.guess_extension(content_type.split(";", 1)[0]) or Path(urllib.parse.urlparse(url).path).suffix or ".img"
     if ext == ".jpe":

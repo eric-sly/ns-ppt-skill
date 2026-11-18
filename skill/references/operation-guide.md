@@ -37,18 +37,60 @@ The pipeline needs Python 3.10+ with `beautifulsoup4` (MHTML/HTML parsing), `lxm
 "<confirmed-python>" -m pip install beautifulsoup4 lxml Pillow
 ```
 
-No browser-automation package is required or permitted for source acquisition.
+Agent capture (§3b) additionally needs `playwright` (`pip install playwright`) and
+an installed Chrome or Edge, which it launches with `--channel chrome`; no browser
+download is required. Without playwright only the manual-save path is available.
 
-## 3. User-saved MHTML intake
+## 3. Source intake
+
+The MHTML set is the only downstream source in both modes. Decide the mode first
+and say which one you used; never present a capture as a manual save.
+
+### 3a. User-saved MHTML
 
 Proactively send the user the file request matching the journal being built and stop for their reply:
 
 - **Nature only** (one file): open the latest Nature issue table of contents, expand the cover description until the control reads `show less`, scroll through the complete issue, and save as `网页，单个文件 (*.mhtml)` or the equivalent single-file option.
 - **Science only** (three files): open the latest Science issue TOC (expand the description control until it reads `View Less`, scroll the full issue), the standalone `In Science Journals` detail page (scroll every item), and the standalone `In Other Journals` detail page; save each as single-file MHTML.
 
-Ask the user to return the absolute file paths and map each path to its role. Do not accept a URL in place of a file. Do not use Playwright, Chrome control, computer-use, web download, `urllib`, `curl`, or another agent-controlled mechanism to open or save these pages. The user owns navigation, login/security checks, expansion, scrolling, and saving.
+Ask the user to return the absolute file paths and map each path to its role. Do
+not accept a URL in place of a file.
 
-After the user replies, verify that the files exist, have `.mhtml` or `.mht` extensions, contain a multipart HTML part, correspond to the declared roles, and belong to the intended current issue. Expansion is primarily a user-operated acquisition step: the parser cannot reliably reconstruct the browser control state. If the parsed cover text is missing or clearly truncated, or a file is wrong, duplicated, or from a different issue, explain which file should be saved again.
+After the user replies, verify that the files exist, have `.mhtml` or `.mht` extensions, contain a multipart HTML part, correspond to the declared roles, and belong to the intended current issue. If the parsed cover text is missing or clearly truncated, or a file is wrong, duplicated, or from a different issue, explain which file should be saved again.
+
+### 3b. Agent capture
+
+When the user asks the agent to fetch the issue itself (or when nobody is at the
+browser), capture with the bundled script instead of improvising:
+
+```text
+"<python>" scripts/capture_issue.py --journal nature  --out-dir work/capture
+"<python>" scripts/capture_issue.py --journal science --out-dir work/capture
+```
+
+What it does per page: navigate → dismiss the cookie banner → click the
+description control until it reads `show less` / `View Less` → scroll the whole
+issue (three passes, so lazy images load) → `Page.captureSnapshot` (MHTML). For
+Science it also follows the `In Science Journals` / `In Other Journals` links
+from the TOC and captures each detail page.
+
+It prints and writes `work/capture/capture-manifest.json` with, per role, the
+requested URL, final URL, title, expansion state, card/section counts, byte size
+and SHA-256. Check the manifest:
+
+- `warnings` must be explained (a description that never expanded, or a card
+  count far below a normal issue, means the capture is incomplete — re-capture
+  with `--headed` and look at the page);
+- `title` must be the intended issue;
+- the roles must be the files you are about to scrape.
+
+Then pass `--capture-manifest work/capture/capture-manifest.json` to `scrape`.
+`issue.json` records `mode: agent-capture`, `agent_browser_automation: true`, the
+tool/version/time and per-file capture evidence, and `scrape` fails if a supplied
+file's hash differs from the manifest.
+
+`--headed` shows the window; use it when a consent wall or a login must be
+completed by hand, then re-run headless for the real capture.
 
 ## 4. MHTML authority and replay
 
@@ -71,7 +113,8 @@ Nature:
 
 ```text
 python scripts/run_nature_only.py --stage scrape \
-  --nature "<user-saved nature-issue.mhtml>" \
+  --nature "<nature-issue.mhtml>" \
+  --capture-manifest "work/capture/capture-manifest.json" \
   --archive-dir "work/sources/issues" \
   --output "work/issue.json" --media-dir "work/media" \
   --translations "work/translations.json"
@@ -81,15 +124,19 @@ Science:
 
 ```text
 python scripts/run_science_only.py --stage scrape \
-  --science-toc "<user-saved science-toc.mhtml>" \
-  --in-science "<user-saved in-science-journals.mhtml>" \
-  --in-other "<user-saved in-other-journals.mhtml>" \
+  --science-toc "<science-toc.mhtml>" \
+  --in-science "<in-science-journals.mhtml>" \
+  --in-other "<in-other-journals.mhtml>" \
+  --capture-manifest "work/capture/capture-manifest.json" \
   --archive-dir "work/sources/issues" \
   --output "work/issue.json" --media-dir "work/media" \
   --translations "work/translations.json"
 ```
 
-`scrape` records each absolute path, SHA-256 hash, embedded page URL, and `user-manual-save` acquisition mode in `issue.json`, and writes the empty translation worksheet. Sections, in-section groups (Nature), and subsections (Science) are discovered from the actual TOC DOM; renamed or new columns are retained. Do not use ordinary HTML cache or live URLs for downstream work.
+Omit `--capture-manifest` for user-saved files; with it, `scrape` records the
+agent-capture provenance and verifies hashes.
+
+`scrape` records each absolute path, SHA-256 hash, embedded page URL, and the acquisition mode (`user-manual-save`, or `agent-capture` plus tool/time/capture evidence when `--capture-manifest` is passed) in `issue.json`, and writes the empty translation worksheet. Sections, in-section groups (Nature), and subsections (Science) are discovered from the actual TOC DOM; renamed or new columns are retained. Do not use ordinary HTML cache or live URLs for downstream work.
 
 ## 5. Translation
 
@@ -181,6 +228,6 @@ python scripts/clean_skill_cache.py --backup   # also prune old backup/ dirs (ke
 
 ## 7. Stop and review conditions
 
-Hard-stop when the environment gate is invalid, the required MHTML file(s) are absent or the wrong role, MHTML parsing fails, a required title/URL/introduction/citation/DOI is missing, a required translation is blank, PPTX construction fails, or no export provider exists when a PDF is required.
+Hard-stop when the environment gate is invalid, the required MHTML file(s) are absent or the wrong role, a capture manifest does not match the supplied bytes, a capture manifest warns that the page never expanded or is obviously incomplete, MHTML parsing fails, a required title/URL/introduction/citation/DOI is missing, a required translation is blank, PPTX construction fails, or no export provider exists when a PDF is required.
 
 Treat suspected truncation, structural-audit errors/warnings, and `officecli` findings as review signals. Fix clear problems when practical. If a usable deck remains and the user prefers a permissive workflow, report unresolved findings and let the agent/user review determine final acceptance.

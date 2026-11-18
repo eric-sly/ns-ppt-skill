@@ -102,11 +102,9 @@ def _playwright():
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:  # pragma: no cover - depends on the host environment
-        raise SystemExit(
-            "playwright is not installed for this interpreter.\n"
-            "  pip install playwright\n"
-            "No browser download is needed when Chrome or Edge is installed; the script "
-            "launches them with --channel chrome (or msedge)."
+        raise RuntimeError(
+            "playwright is not installed for this interpreter (pip install playwright; "
+            "Chrome or Edge is then launched with --channel chrome, no browser download needed)"
         )
     return sync_playwright
 
@@ -271,7 +269,41 @@ def _launch(playwright, channel: str | None, headless: bool):
         except Exception as error:  # channel not installed
             last_error = error
             continue
-    raise SystemExit(f"could not launch a Chromium-family browser: {last_error}")
+    raise RuntimeError(f"could not launch a Chromium-family browser: {last_error}")
+
+
+def _role_targets(journal: str, toc_url: str, out_dir: Path,
+                  in_science_url: str | None, in_other_url: str | None):
+    if journal == "nature":
+        return [("nature", toc_url, out_dir / "nature-issue.mhtml")]
+    return [
+        ("science_toc", toc_url, out_dir / "science-toc.mhtml"),
+        ("in_science", in_science_url or "", out_dir / "in-science-journals.mhtml"),
+        ("in_other", in_other_url or "", out_dir / "in-other-journals.mhtml"),
+    ]
+
+
+def _emit_failure(out_dir: Path, journal: str, failures: list[dict[str, Any]],
+                  channel: str | None, headless: bool,
+                  warnings: list[str] | None = None) -> int:
+    manifest = {
+        "journal": journal,
+        "tool": "capture_issue.py",
+        "tool_version": TOOL_VERSION,
+        "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "channel": channel,
+        "headless": headless,
+        "status": "failed",
+        "files": {},
+        "failures": failures,
+        "message_for_user": _request_message(journal, failures),
+    }
+    if warnings:
+        manifest["warnings"] = warnings
+    manifest_path = out_dir / "capture-manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({"manifest": str(manifest_path.resolve()), **manifest}, ensure_ascii=False, indent=2))
+    return 3
 
 
 def _request_message(journal: str, failures: list[dict[str, Any]]) -> str:
@@ -319,7 +351,23 @@ def main() -> int:
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    sync_playwright = _playwright()
+    sync_playwright = None
+    try:
+        sync_playwright = _playwright()
+    except RuntimeError as error:
+        failures = [
+            {
+                "role": role,
+                "reason": f"browser automation is unavailable: {error}",
+                "url": url or None,
+                "save_to": str(path.resolve()),
+                "steps": list(SAVE_STEPS[role]),
+            }
+            for role, url, path in _role_targets(args.journal, toc_url, out_dir,
+                                                 args.in_science_url, args.in_other_url)
+        ]
+        return _emit_failure(out_dir, args.journal, failures, None, not args.headed)
+
     warnings: list[str] = []
     files: dict[str, dict[str, Any]] = {}
     failures: list[dict[str, Any]] = []
@@ -348,7 +396,21 @@ def main() -> int:
         })
 
     with sync_playwright() as playwright:
-        browser, channel_used = _launch(playwright, args.channel, not args.headed)
+        try:
+            browser, channel_used = _launch(playwright, args.channel, not args.headed)
+        except RuntimeError as error:
+            failures = [
+                {
+                    "role": role,
+                    "reason": str(error),
+                    "url": url or None,
+                    "save_to": str(path.resolve()),
+                    "steps": list(SAVE_STEPS[role]),
+                }
+                for role, url, path in _role_targets(args.journal, toc_url, out_dir,
+                                                     args.in_science_url, args.in_other_url)
+            ]
+            return _emit_failure(out_dir, args.journal, failures, args.channel, not args.headed)
         context = browser.new_context(
             viewport={"width": 1440, "height": 1000},
             locale="en-US",
@@ -426,24 +488,8 @@ def main() -> int:
                 rejected_dir.mkdir(parents=True, exist_ok=True)
                 path.replace(rejected_dir / path.name)
             files.pop(role, None)
-        manifest = {
-            "journal": args.journal,
-            "tool": "capture_issue.py",
-            "tool_version": TOOL_VERSION,
-            "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "channel": channel_used,
-            "headless": not args.headed,
-            "status": "failed",
-            "files": files,
-            "failures": failures,
-            "message_for_user": _request_message(args.journal, failures),
-        }
-        if warnings:
-            manifest["warnings"] = warnings
-        manifest_path = out_dir / "capture-manifest.json"
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps({"manifest": str(manifest_path.resolve()), **manifest}, ensure_ascii=False, indent=2))
-        return 3
+        return _emit_failure(out_dir, args.journal, failures, channel_used,
+                             not args.headed, warnings)
 
     manifest = {
         "journal": args.journal,

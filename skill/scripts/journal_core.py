@@ -1789,11 +1789,22 @@ def audit(deck: Path, kind: str, inventory: Path | None, issue_path: Path | None
                                 rpr = run_props(child)
                                 if rpr is not None and rpr.get("sz"):
                                     part_sizes[-1].append(int(rpr.get("sz")) / 100)
+                        paragraph_lines = 0
                         for part, sizes in zip(parts, part_sizes):
                             if not part.strip():
                                 continue
                             size = max(sizes) if sizes else 18.0
-                            est_lines += estimated_wrap_lines(part, size, body_w)
+                            paragraph_lines += estimated_wrap_lines(part, size, body_w)
+                        # The planner budgets exactly two visual lines for a RELATED
+                        # line (item_visual_lines); wrapping the real text can give
+                        # three on a long title, which made the audit reject pages
+                        # the planner built and PowerPoint renders without overflow.
+                        # Keep the audit on the same budget for these lines.
+                        if normalized(text(paragraph)).upper().startswith(
+                            ("RELATED PERSPECTIVE", "RELATED RESEARCH ARTICLE")
+                        ):
+                            paragraph_lines = min(paragraph_lines, 2)
+                        est_lines += paragraph_lines
                 body_plain_paragraphs.extend(
                     normalized(text(paragraph))
                     for paragraph in body_paragraphs

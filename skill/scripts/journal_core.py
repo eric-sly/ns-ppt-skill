@@ -1745,8 +1745,18 @@ def audit(deck: Path, kind: str, inventory: Path | None, issue_path: Path | None
                     ppr = paragraph.find("a:pPr", NS)
                     if ppr is None or ppr.get("lvl") != "1":
                         errors.append(f"slide {sn}: {related_label} is not level 1")
-                    if len(linked_runs) < 2:
-                        errors.append(f"slide {sn}: {related_label} bilingual title lacks links")
+                    # The related target is usually another item in the same issue,
+                    # so the line is EN + ZH.  A target outside the issue (for
+                    # example the retracted 2016 paper behind an Editor's Note) has
+                    # no translation entry and renders English only; that is valid
+                    # as long as every title run that does exist is linked.
+                    title_runs = [
+                        run for run in paragraph.findall("a:r", NS)
+                        if normalized(text(run))
+                        and not normalized(text(run)).upper().startswith(related_label)
+                    ]
+                    if not title_runs or not all(has_link(run) for run in title_runs):
+                        errors.append(f"slide {sn}: {related_label} title is not fully hyperlinked")
             # Capacity gate: digest detail slides (one item each) and the cover
             # are exempt. Nature Articles pages use the dedicated two-primary-item
             # rule; every other list slide uses the visual-line budget.

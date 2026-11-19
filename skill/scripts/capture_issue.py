@@ -46,6 +46,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -186,7 +187,7 @@ def _wait_ready(page, selector: str, timeout_ms: int) -> None:
         pass
 
 
-def _diagnostics(page, journal: str) -> dict[str, Any]:
+def _diagnostics(page, journal: str, is_toc: bool = True) -> dict[str, Any]:
     data: dict[str, Any] = {
         "url": page.url,
         "title": page.title(),
@@ -195,9 +196,14 @@ def _diagnostics(page, journal: str) -> dict[str, Any]:
     if journal == "nature":
         data["cards"] = page.locator(".c-card").count()
         data["sections"] = page.locator("section[id]").count()
-    else:
+    elif is_toc:
+        # Science issue table of contents: one h3 per primary card, one section per column.
         data["cards"] = page.locator("h3.article-title").count()
         data["sections"] = page.locator("section.toc__section").count()
+    else:
+        # Science digest detail page: one section and one label per digest entry.
+        data["cards"] = page.locator(".core-label").count()
+        data["sections"] = page.locator("section[id^=sec-]").count()
     lower = _norm(data["title"])
     data["challenge"] = next((marker for marker in CHALLENGE_TITLES if marker in lower), None)
     data["body_text"] = _norm(page.evaluate("document.body ? document.body.innerText.slice(0, 400) : ''"))
@@ -221,13 +227,25 @@ def _snapshot(page, out_path: Path) -> dict[str, Any]:
 
 def _capture_one(page, url: str, out_path: Path, journal: str,
                  expand_selector: str, expanded_text: str, timeout_ms: int,
-                 is_toc: bool = True) -> dict[str, Any]:
+                 is_toc: bool = True, wait_seconds: float = 0) -> dict[str, Any]:
     page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    ready_selector = ".c-card, .article-title" if is_toc else "section[id^=sec-], .core-label"
+    if wait_seconds > 0:
+        print(f"WAITING up to {int(wait_seconds)}s for {url}: complete any challenge in the browser window",
+              file=sys.stderr, flush=True)
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            try:
+                if page.locator(ready_selector).count():
+                    break
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
     if is_toc:
-        _wait_ready(page, ".c-card, .article-title", timeout_ms)
+        _wait_ready(page, ready_selector, timeout_ms)
         _wait_ready(page, expand_selector, timeout_ms)
     else:
-        _wait_ready(page, "section[id^=sec-], .core-label", timeout_ms)
+        _wait_ready(page, ready_selector, timeout_ms)
     cookie = _dismiss_cookies(page)
     labels = _expand(page, expand_selector, expanded_text)
     _scroll_through(page)
@@ -236,7 +254,7 @@ def _capture_one(page, url: str, out_path: Path, journal: str,
     except Exception:
         pass
     page.wait_for_timeout(1200)
-    result = _diagnostics(page, journal)
+    result = _diagnostics(page, journal, is_toc)
     result.update(_snapshot(page, out_path))
     result["requested_url"] = url
     result["expansion_labels"] = labels
@@ -260,7 +278,23 @@ def _digest_urls(page) -> dict[str, str]:
     return found
 
 
-def _launch(playwright, channel: str | None, headless: bool):
+def _launch(playwright, channel: str | None, headless: bool,
+            profile_dir: str | None = None, cdp_url: str | None = None):
+    """Attach to a running Chrome, or launch one.
+
+    Returns (launcher, channel, mode) where mode is:
+      * `cdp`        — attached over the DevTools protocol to a browser the user
+                       started (no automation flags, so a bot check that loops on
+                       Playwright-launched Chrome usually passes); the browser is
+                       left running on exit;
+      * `persistent` — Playwright launched it with an on-disk profile, so
+                       clearance cookies survive between runs;
+      * `launch`     — a throw-away browser.
+    """
+    if cdp_url:
+        browser = playwright.chromium.connect_over_cdp(cdp_url)
+        context = browser.contexts[0] if browser.contexts else browser.new_context()
+        return context, "cdp", "cdp"
     channels = [channel] if channel else ["chrome", "msedge", ""]
     last_error: Exception | None = None
     for name in channels:
@@ -268,8 +302,17 @@ def _launch(playwright, channel: str | None, headless: bool):
             kwargs: dict[str, Any] = {"headless": headless, "args": ["--lang=en-US"]}
             if name:
                 kwargs["channel"] = name
+            if profile_dir:
+                context = playwright.chromium.launch_persistent_context(
+                    str(Path(profile_dir).expanduser().resolve()),
+                    viewport={"width": 1440, "height": 1000},
+                    locale="en-US",
+                    timezone_id="Europe/London",
+                    **kwargs,
+                )
+                return context, name or "bundled-chromium", "persistent"
             browser = playwright.chromium.launch(**kwargs)
-            return browser, name or "bundled-chromium"
+            return browser, name or "bundled-chromium", "launch"
         except Exception as error:  # channel not installed
             last_error = error
             continue
@@ -351,6 +394,9 @@ def main() -> int:
     parser.add_argument("--in-other-url", help="Science: In Other Journals detail URL if the TOC link is not found")
     parser.add_argument("--channel", help="browser channel: chrome, msedge, chromium (default: try chrome, then msedge, then bundled)")
     parser.add_argument("--headed", action="store_true", help="show the browser window (use when a consent wall needs a human)")
+    parser.add_argument("--profile-dir", help="persistent browser profile directory; keeps bot-check clearance cookies between runs")
+    parser.add_argument("--cdp-url", help="attach to an already running Chrome over CDP (start it with --remote-debugging-port=9222) instead of launching one")
+    parser.add_argument("--wait-for-user", type=float, default=0, help="after loading a page, wait up to N seconds for it to render (solve a challenge in the window first)")
     parser.add_argument("--timeout", type=float, default=90.0, help="navigation timeout in seconds (default 90)")
     args = parser.parse_args()
 
@@ -415,7 +461,7 @@ def main() -> int:
 
     with sync_playwright() as playwright:
         try:
-            browser, channel_used = _launch(playwright, args.channel, not args.headed)
+            launcher, channel_used, mode = _launch(playwright, args.channel, not args.headed, args.profile_dir, args.cdp_url)
         except RuntimeError as error:
             advice = (
                 "No Chrome/Edge window could be launched. Ask the user whether to point the "
@@ -434,18 +480,25 @@ def main() -> int:
                                                      args.in_science_url, args.in_other_url)
             ]
             return _emit_failure(out_dir, args.journal, failures, args.channel, not args.headed)
-        context = browser.new_context(
-            viewport={"width": 1440, "height": 1000},
-            locale="en-US",
-            timezone_id="Europe/London",
-        )
-        page = context.new_page()
+        if mode in {"persistent", "cdp"}:
+            context = launcher
+            pages = list(context.pages)
+            page = next((p for p in pages if "science.org" in p.url or "nature.com" in p.url), None) \
+                or (pages[0] if pages else context.new_page())
+        else:
+            context = launcher.new_context(
+                viewport={"width": 1440, "height": 1000},
+                locale="en-US",
+                timezone_id="Europe/London",
+            )
+            page = context.new_page()
 
         if args.journal == "nature":
             target = out_dir / "nature-issue.mhtml"
             result = _capture_one(
                 page, toc_url, target, "nature",
                 NATURE_EXPAND_SELECTOR, NATURE_EXPANDED_TEXT, timeout_ms,
+                wait_seconds=args.wait_for_user,
             )
             result["requested_url"] = toc_url
             files["nature"] = result
@@ -459,6 +512,7 @@ def main() -> int:
             toc_result = _capture_one(
                 page, toc_url, toc_target, "science",
                 SCIENCE_EXPAND_SELECTOR, SCIENCE_EXPANDED_TEXT, timeout_ms,
+                wait_seconds=args.wait_for_user,
             )
             toc_result["requested_url"] = toc_url
             files["science_toc"] = toc_result
@@ -489,6 +543,7 @@ def main() -> int:
                     detail = context.new_page()
                     result = _capture_one(
                         detail, url, target, "science", "", "", timeout_ms, is_toc=False,
+                        wait_seconds=args.wait_for_user,
                     )
                     result["requested_url"] = url
                     detail.close()
@@ -498,19 +553,26 @@ def main() -> int:
                     else:
                         files[role] = result
 
-        browser.close()
+        if mode == "launch":
+            context.close()
+            launcher.close()
+        elif mode == "persistent":
+            context.close()
+        # mode == "cdp": leave the user's browser (and its clearance cookies) running
 
     if failures:
         # Never leave a challenge page behind as if it were a usable source.
         rejected_dir = out_dir / "rejected"
-        failed_roles = {failure["role"] for failure in failures}
-        for role in failed_roles:
-            captured = files.get(role) or {}
-            path = Path(captured.get("path", "")) if captured.get("path") else None
-            if path and path.is_file():
-                rejected_dir.mkdir(parents=True, exist_ok=True)
-                path.replace(rejected_dir / path.name)
-            files.pop(role, None)
+        for failure in failures:
+            captured = files.pop(failure["role"], None) or {}
+            candidates = [captured.get("path"), failure.get("save_to")]
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                path = Path(candidate)
+                if path.is_file():
+                    rejected_dir.mkdir(parents=True, exist_ok=True)
+                    path.replace(rejected_dir / path.name)
         return _emit_failure(out_dir, args.journal, failures, channel_used,
                              not args.headed, warnings)
 
